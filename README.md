@@ -26,7 +26,44 @@
 
 日付時刻はタイムゾーンを持たない「撮影地のローカル時刻」として扱い、ICS でも TZID なしの浮動時刻で出力します。
 
-## 起動方法
+## 起動方法 (Docker / WSL2)
+
+.NET SDK や Node.js をホストに入れずに、Docker だけで開発できます。
+WSL2 内の Docker Engine (または Docker Desktop の WSL2 バックエンド) を想定しています。
+
+```sh
+cp .env.example .env   # UID/GID が 1000 以外なら `id -u` / `id -g` の値に書き換える
+docker compose up --build
+```
+
+- フロントエンド: http://localhost:5173 (Windows 側のブラウザからも開けます)
+- バックエンド: http://localhost:5080
+
+ソースはコンテナにバインドマウントしているので、ホスト側で編集すると `dotnet watch` と Vite が変更を拾って反映します。
+
+| サービス | 内容 |
+| --- | --- |
+| `api` | `dotnet watch run` でバックエンドを起動 (ポート 5080) |
+| `web` | `npm install` のあと Vite 開発サーバーを起動 (ポート 5173)。`/api` は `api` コンテナへ中継 |
+
+よく使うコマンド:
+
+```sh
+docker compose exec web npm run build   # フロントエンドをビルドして backend の wwwroot に出力
+docker compose exec web npm run lint
+docker compose exec api bash            # .NET SDK と Node.js が入ったシェル
+docker compose down                     # 停止 (-v を付けると node_modules や NuGet キャッシュのボリュームも消す)
+```
+
+補足:
+
+- リポジトリは WSL2 のファイルシステム (`~/` 以下など) に置くことをおすすめします。
+  Windows 側 (`/mnt/c/...`) に置くとファイル変更通知が届かないため、`.env` で `WATCH_POLLING=true` にしてください (ポーリングになり CPU 負荷が上がります)。
+- コンテナ内のユーザーは `.env` の UID/GID で作られるので、コンテナが作ったファイル (`data/`, `wwwroot/` など) も WSL2 のユーザーの所有になります。UID/GID を変えたら `docker compose build` し直してください。
+- `bin/`, `obj/`, `node_modules/` は名前付きボリュームに置いているので、ホスト側で `dotnet` や `npm` を直接使う場合と混ざりません。
+- 写真データは従来どおり `backend/PhotoCalendar.Api/data/` に保存されます。
+
+## 起動方法 (ローカル)
 
 必要なもの: .NET 10 SDK, Node.js 20 以上
 
