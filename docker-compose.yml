@@ -1,0 +1,60 @@
+# PhotoCalendar 開発環境
+#
+#   docker compose up --build
+#
+#   フロントエンド (Vite):      http://localhost:5173
+#   バックエンド (ASP.NET Core): http://localhost:5080
+#
+# ソースはバインドマウントしているので、ホスト側で編集すると
+# dotnet watch / Vite が検知して反映する。
+
+x-dev: &dev
+  build:
+    context: .
+    args:
+      USER_UID: ${UID:-1000}
+      USER_GID: ${GID:-1000}
+  image: photocalendar-dev
+  volumes:
+    - .:/workspace
+    # bin/obj と node_modules はコンテナ専用にし、ホスト側のビルド結果と混ざらないようにする
+    - api-bin:/workspace/backend/PhotoCalendar.Api/bin
+    - api-obj:/workspace/backend/PhotoCalendar.Api/obj
+    - node-modules:/workspace/frontend/node_modules
+    - nuget-packages:/home/dev/.nuget/packages
+  init: true
+  tty: true
+  stdin_open: true
+
+services:
+  api:
+    <<: *dev
+    working_dir: /workspace/backend/PhotoCalendar.Api
+    command: dotnet watch run --non-interactive --no-launch-profile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://0.0.0.0:5080
+      # Windows 側 (/mnt/c/...) にソースを置く場合は inotify が届かないので WATCH_POLLING=true にする
+      DOTNET_USE_POLLING_FILE_WATCHER: ${WATCH_POLLING:-false}
+      DOTNET_WATCH_RESTART_ON_RUDE_EDIT: "true"
+    ports:
+      - "${API_PORT:-5080}:5080"
+
+  web:
+    <<: *dev
+    working_dir: /workspace/frontend
+    # package-lock.json が変わっていれば npm install が差分だけ入れる
+    command: sh -c "npm install --no-audit --no-fund && npm run dev -- --host 0.0.0.0 --port 5173 --strictPort"
+    environment:
+      API_URL: http://api:5080
+      WATCH_POLLING: ${WATCH_POLLING:-false}
+    ports:
+      - "${WEB_PORT:-5173}:5173"
+    depends_on:
+      - api
+
+volumes:
+  api-bin:
+  api-obj:
+  node-modules:
+  nuget-packages:
